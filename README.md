@@ -1,122 +1,153 @@
-# 🌙 LunaFlow & LunaClip 🩸
-**An AI-Powered Women's Health & IoT Diagnostic Ecosystem**
+# 🌙 LunaFlow & LunaClip 
+**Explainable Menstrual Pattern Analysis & Early Health Risk Awareness**
+LunaFlow eradicates the "Silent Epidemic" of Iron Deficiency Anemia. We combined a non-invasive biometric wearable (LunaClip) with an Explainable AI engine. By merging live physical vitals (Hb, SpO2) with menstrual logs, we provide proactive health alerts, data-backed medical leave requests, and comprehensive clinical reports for women.
 
-LunaFlow revolutionizes women's health by fusing Machine Learning cycle tracking with physical IoT diagnostics. Paired seamlessly with **LunaClip**—our custom ESP32 wearable—via WebBLE, the system streams real-time, non-invasive hemoglobin vitals directly to the browser. By analyzing period history alongside live blood data, our Ensemble ML engine instantly detects hidden anemia and dysmenorrhea risks to deliver predictive, personalized care.
+
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-43853D?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![ESP32](https://img.shields.io/badge/ESP32-E7352C?style=flat&logo=espressif&logoColor=white)](https://www.espressif.com/)
+
+> *Current menstrual trackers are just digital calendars. Clinical blood tests are invasive and painful. We built the world's first ecosystem combining IoT hardware and Explainable AI to bridge the gap between subjective cycle logging and clinical diagnostics.*
+
+---
+
+## 📖 Table of Contents
+- [The Problem](#-the-problem)
+- [Our Solution](#-our-solution)
+- [Key Features](#-key-features)
+- [Hardware Architecture (LunaClip)](#-hardware-architecture-lunaclip)
+- [Software & AI Architecture (LunaFlow)](#-software--ai-architecture-lunaflow)
+- [Tech Stack](#-tech-stack)
+- [How It Works (User Journey)](#-how-it-works)
+- [Installation & Setup](#-installation--setup)
+- [Future Roadmap](#-future-roadmap)
+
+---
+
+## 🚨 The Problem: The "Silent Epidemic"
+Globally, millions of women suffer from **Iron Deficiency Anemia** directly linked to heavy menstrual bleeding (Menorrhagia). However, current solutions fail because:
+1. **Subjective Data:** Period tracking apps rely on users guessing their flow intensity, which isn't enough for a medical diagnosis.
+2. **Invasive Testing:** Getting actual blood vitals requires painful, infrequent needle pricks.
+3. **The AI "Black Box":** Even when AI is used in healthcare, it rarely explains *why* a risk is flagged, leading to a lack of trust from both patients and doctors.
+4. **Institutional Stigma:** Women lack a data-backed, transparent way to request medical leaves or report grievances in schools and workplaces.
+
+---
+
+## 💡 Our Solution: The Luna Ecosystem
+**LunaFlow** (Software) and **LunaClip** (IoT Hardware) create a seamless, end-to-end women's health platform. 
+
+We use a low-cost optical sensor to painlessly extract physical blood vitals and cross-analyze them with the user's logged menstrual data using an **Explainable AI (XAI)** engine. This predicts hidden health risks early, generates actionable wellness plans, and empowers women with undeniable physiological proof of their symptoms.
 
 ---
 
 ## ✨ Key Features
-* **🤖 Ensemble ML Risk Assessment:** Predicts hidden health risks (e.g., Anemia) based on menstrual flow, pain levels, and cycle duration.
-* **🩸 LunaClip IoT Integration:** Real-time Hemoglobin (Hb) monitoring via Photoplethysmography (PPG) and Web Bluetooth (WebBLE).
-* **🧠 AI Wellness Plans:** Generates highly personalized regional diet charts, yoga routines, and health habits based on dynamic health scores.
-* **📊 Interactive Dashboard:** Visualizes cycle trends, flow distribution, and a historical timeline of blood vitals.
+
+* **🩸 Non-Invasive Vitals:** Painless, real-time Hemoglobin (Hb), Blood Oxygen (SpO2), and Heart Rate (BPM) tracking via optical sensors.
+* **🧠 Explainable AI:** Our Machine Learning model cross-analyzes live physical vitals with logged symptoms to predict Anemia, explicitly stating the reasoning behind the risk score.
+* **🥗 Actionable Wellness:** Generates hyper-localized diet charts, yoga routines, and healthy habit recommendations based on the AI vitality score.
+* **🏢 Institutional Equity:** A 5-tier role-based enterprise portal (User → Dept Head → Admin → State Govt → Central Govt) for data-backed medical leaves and secure, image-supported grievance reporting.
+* **📄 Automated Clinical Reports:** 1-click generation of comprehensive PDF medical reports to eliminate "medical gaslighting" at the doctor's office.
 
 ---
 
-## 🛠️ System Architecture & Methods Used
+## ⚙️ Hardware Architecture (LunaClip)
+LunaClip is a low-cost, non-invasive wearable clip that measures critical blood vitals using photoplethysmography (PPG).
 
-### 1. Hardware & Signal Processing (LunaClip)
-* **Microcontroller & Sensor:** ESP32 DevKit V1 + MAX30102 Oximetry Sensor (I2C Protocol).
-* **Photoplethysmography (PPG):** Analyzes blood volume changes using Red and Infrared (IR) LEDs.
-* **Ratio of Ratios (Hb Index):** Separates AC (pulsatile) and DC (baseline) optical signals to estimate Hemoglobin:
-$$Hb_{index} = \frac{Red_{AC} / Red_{DC}}{IR_{AC} / IR_{DC}}$$
-* **WebBLE (Web Bluetooth):** Operates the ESP32 as a GATT Server, allowing the React frontend to connect directly to the hardware without a mobile app middleman.
-
-### 2. Software Stack
-* **Frontend:** React.js, TypeScript, Tailwind CSS, Recharts.
-* **Backend:** Node.js, Express.js, MongoDB (Mongoose ODM).
-* **ML Microservice:** Python, FastAPI, Uvicorn, Scikit-Learn.
+* **Components:** ESP32 Microcontroller + MAX30102 Oximetry Sensor.
+* **The Math:** Uses the **'Ratio of Ratios'** algorithm to extract Red and Infrared AC/DC values to calculate Hb and SpO2.
+* **Signal Filtration:** To prevent motion artifacts (noise from movement), the C++ firmware calculates the **Perfusion Index (PI)** locally. It rejects flatlines or spikes *before* transmitting data to the web.
+* **Driverless Integration:** Connects directly to the React web browser via the **Web Serial API** (`navigator.serial`). No Bluetooth pairing or external driver installations are required.
 
 ---
 
-## 🚀 Installation & Setup Guide
+## 💻 Software & AI Architecture (LunaFlow)
+LunaFlow is the central hub for data visualization, AI prediction, and enterprise management.
 
-This project runs on three separate servers: the Node Backend, the Python ML Microservice, and the React Frontend. You will need 3 separate terminal windows open.
+* **Real-Time Console:** Features a live, auto-scrolling terminal inside the React dashboard. Users can watch the hardware actively scan and sync JSON vital packets in real-time.
+* **Cross-Analysis ML Engine:** Built with Python (FastAPI/Scikit-learn). It receives mixed payloads (e.g., "Heavy Flow" from the DB + "10.2 g/dL Hb" from the hardware) to generate holistic risk assessments.
+* **Dynamic Visualizations:** Utilizes `Recharts` to plot historical cycle trends, duration, and flow intensity distributions over time.
+
+---
+
+## 🛠️ Tech Stack
+
+**Frontend:**
+* React.js (TypeScript)
+* Tailwind CSS
+* Recharts (Data Visualization)
+* jsPDF & autoTable (Report Generation)
+* Lucide React (Icons)
+
+**Backend & Database:**
+* Node.js & Express.js
+* MongoDB & Mongoose (ODM)
+* Python & FastAPI (Machine Learning Microservice)
+
+**Hardware / IoT:**
+* ESP32 Microcontroller
+* C++ (Arduino Framework)
+* Web Serial API (Browser-to-Hardware communication)
+
+---
+
+## 🚀 How It Works (The User Journey)
+
+1. **Log Data:** The user logs their recent menstrual cycle details (duration, flow intensity, pain level) in the LunaFlow web app.
+2. **Scan Vitals:** The user connects the LunaClip via USB, clicks "Connect," and places their finger on the sensor. Live Hb, SpO2, and HR stream into the dashboard terminal.
+3. **Cross-Analyze:** The user clicks "Generate Cross-Report." The system sends both the cycle logs and the physical vitals to the Python AI engine.
+4. **Get Insights:** The AI returns an explainable risk assessment (e.g., "High Risk of Anemia detected due to low Hb compounded by heavy bleeding") along with personalized diet and yoga plans.
+5. **Export & Act:** The user exports a PDF report for their doctor or uses their Vitality Score to apply for an institutional medical leave.
+
+---
+
+## 💻 Installation & Setup
 
 ### Prerequisites
-* [Node.js](https://nodejs.org/) installed
-* [Python 3.9+](https://www.python.org/downloads/) installed
-* MongoDB connection URI (Atlas or Local)
+* Node.js (v16+)
+* Python (v3.8+)
+* MongoDB (Local or Atlas URI)
+* Arduino IDE (for ESP32 hardware)
 
-### 1. Backend Setup (Node.js)
-Open your first terminal and navigate to your backend folder:
+### 1. Clone the Repository
 ```bash
-# Install dependencies
-npm install express mongoose cors dotenv axios
-
-# Create a .env file and add your MongoDB URI
-echo "MONGODB_URI=your_mongodb_connection_string_here" > .env
-
-# Start the server
-node server.js
-Server will run on http://localhost:5000
-
-2. ML Microservice Setup (Python FastAPI)
-Open your second terminal and navigate to the ml_service folder:
-
+git clone [https://github.com/YOUR_USERNAME/LunaFlow.git](https://github.com/YOUR_USERNAME/LunaFlow.git)
+cd LunaFlow
+2. Setup the Node.js Backend
 Bash
-# Windows: Create and activate virtual environment
-python -m venv .venv
-.\.venv\Scripts\activate
-
-# Mac/Linux: Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install required Python packages
-pip install fastapi uvicorn scikit-learn pandas pydantic
-
-# Run the FastAPI server
-uvicorn main:app --reload
-ML Service will run on http://127.0.0.1:8000
-
-3. Frontend Setup (React/Vite)
-Open your third terminal and navigate to the React frontend folder (Periods-tracker):
-
-Bash
-# Install standard dependencies
+cd backend
 npm install
+# Create a .env file and add your MONGODB_URI
+# Start the server (runs on port 5000)
+node server.js
+3. Setup the Python ML Service
+Bash
+cd ../ml_service
+pip install -r requirements.txt
+# Start the FastAPI server (runs on port 8000)
+uvicorn main:app --reload
+4. Setup the React Frontend
+Bash
+cd ../frontend
+npm install
+# Start the development server (runs on port 3000)
+npm start
+5. Flash the Hardware (Optional)
+Open hardware/LunaClip_V3.ino in the Arduino IDE.
 
-# Install Web Bluetooth types for TypeScript
-npm install --save-dev @types/web-bluetooth
+Install the MAX30105 library via the Library Manager.
 
-# Start the React development server
-npm run dev
-Frontend will run on http://localhost:5173
+Select your ESP32 board and COM port.
 
-🔌 Hardware Setup (LunaClip)
-1. Wiring:
+Upload the code.
 
-MAX30102 VIN ➔ ESP32 3.3V
+🔮 Future Roadmap
+LunaRing: Miniaturizing the hardware into a continuous-wear smart ring for 24/7 passive anomaly detection.
 
-MAX30102 GND ➔ ESP32 GND
+Advanced AI Diagnostics: Training models to predict complex conditions like PCOS and Endometriosis using Basal Body Temperature variations.
 
-MAX30102 SDA ➔ ESP32 D21
+Direct Telemedicine: Adding a secure portal to forward AI-generated PDF reports directly to partnered gynecologists.
 
-MAX30102 SCL ➔ ESP32 D22
-
-2. Arduino IDE Setup:
-
-Install the ESP32 Board Manager by Espressif.
-
-Go to Library Manager and install the SparkFun MAX3010x Pulse and Proximity Sensor Library.
-
-3. Upload: * Select ESP32 Dev Module and upload the provided C++ code.
-
-💡 How to Use the System
-Launch all three local servers (Node, Python, React).
-
-Open Google Chrome or Microsoft Edge (WebBLE is not supported in Firefox/Safari).
-
-Navigate to http://localhost:5173 and log in.
-
-Go to the Dashboard.
-
-Ensure your ESP32 is powered on. Click Pair Device on the dashboard.
-
-Select LunaClip from the browser popup.
-
-Place your finger on the MAX30102 sensor. Your live Hemoglobin vitals will appear on screen! Click Save Reading to log it to your medical history.
-
-Go to AI Analysis to generate a holistic wellness report combining your period data and new blood vitals.
-
+Offline PWA: Implementing Progressive Web App features and vernacular languages (Hindi, Bengali) for rural accessibility.
