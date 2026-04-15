@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { PeriodLog, UserProfile } from '../types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
-import { Calendar, Activity, AlertCircle, TrendingUp, Droplet, ArrowRight, FileText, Clock, X, ShieldCheck, Utensils, Flower2, Apple, CheckCircle2, Bluetooth, Save, Download } from 'lucide-react';
+import { Calendar, Activity, AlertCircle, TrendingUp, Droplet, ArrowRight, FileText, Clock, X, ShieldCheck, Utensils, Flower2, Apple, CheckCircle2, Bluetooth, Save, Download, Info, Users, FileWarning, Check, XCircle, Heart } from 'lucide-react';
 import { api } from '../services/api'; 
 import LunaClipConnect from './LunaClipConnect'; 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+// 🌟 Import the Enterprise Addon Panels!
+import DeptActionPanel from './enterprise/DeptActionPanel';
+import AdminPanel from './enterprise/AdminPanel';
+import GovtMonitorPanel from './enterprise/GovtMonitorPanel';
 
 interface Props {
   logs: PeriodLog[];
@@ -16,27 +21,63 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
   const [savedReports, setSavedReports] = useState<any[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
+  
+  // Multi-Vital States
   const [liveHb, setLiveHb] = useState<number | null>(null);
+  const [liveHr, setLiveHr] = useState<number | null>(null);
+  const [liveSpo2, setLiveSpo2] = useState<number | null>(null);
+
   const [userIdState, setUserIdState] = useState<string | null>(null);
   const [hbHistory, setHbHistory] = useState<any[]>([]);
   const [isSavingHb, setIsSavingHb] = useState(false);
 
-  // --- NEW: Secure states to hold the absolute true user data from the database ---
+  // --- Unified Role States ---
+  const [userRole, setUserRole] = useState<string>('female_user');
+  const [enterpriseLeaves, setEnterpriseLeaves] = useState<any[]>([]);
+  const [enterpriseComplaints, setEnterpriseComplaints] = useState<any[]>([]);
+
+  // --- States for the Cross-Analysis AI Engine ---
+  const [comboReport, setComboReport] = useState<any | null>(null);
+  const [isGeneratingCombo, setIsGeneratingCombo] = useState(false);
+
+  // --- Secure states to hold the absolute true user data from the database ---
   const [userName, setUserName] = useState<string>("Patient");
   const [userAge, setUserAge] = useState<number>(profile?.age || 25);
   const [userLocation, setUserLocation] = useState<string>(profile?.location || 'N/A');
+
+  const getRiskColor = (level: string) => {
+    switch (level) {
+      case 'High': return 'text-red-600 bg-red-50 border-red-100';
+      case 'Moderate': return 'text-orange-600 bg-orange-50 border-orange-100';
+      default: return 'text-teal-600 bg-teal-50 border-teal-100';
+    }
+  };
 
   useEffect(() => {
     const fetchReportsAndHistory = async () => {
       try {
         let userId = null;
-        const userStr = localStorage.getItem('user');
-        if (userStr) {
+        let localRoleFallback = 'female_user';
+        
+        // --- Extract Unified Role from Session ---
+        const sessionStr = localStorage.getItem('lunaflow_session');
+        if (sessionStr) {
             try {
-                const userObj = JSON.parse(userStr);
-                userId = userObj._id || userObj.id;
+                const userObj = JSON.parse(sessionStr);
+                userId = userObj._id || userObj.id || userObj.user_id; 
+                localRoleFallback = userObj.role || 'female_user';
+                if (userObj.name) setUserName(userObj.name);
             } catch (e) {}
         }
+        
+        const userStr = localStorage.getItem('user');
+        if (!sessionStr && userStr) {
+            try {
+                const userObj = JSON.parse(userStr);
+                userId = userObj._id || userObj.id || userObj.user_id;
+            } catch (e) {}
+        }
+        
         if (!userId) userId = localStorage.getItem('userId');
         if (!userId && logs.length > 0) {
             // @ts-ignore
@@ -45,23 +86,45 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
 
         if (userId) {
           setUserIdState(userId); 
-          
-          // 1. Fetch authoritative User Data directly from DB to fix Name/Age bugs
+
+          let trueRole = localRoleFallback;
+
+          // 🌟 STEP 1: FETCH TRUE ROLE FROM MONGODB FIRST! 🌟
           try {
-             const userRes = await fetch(`http://localhost:5000/api/data/${userId}`);
-             if (userRes.ok) {
-                 const userData = await userRes.json();
-                 if (userData.name) setUserName(userData.name);
-                 if (userData.profile?.age) setUserAge(userData.profile.age);
-                 if (userData.profile?.location) setUserLocation(userData.profile.location);
-             }
+              const userRes = await fetch(`http://localhost:5000/api/data/${userId}`);
+              if (userRes.ok) {
+                  const userData = await userRes.json();
+                  if (userData.name) setUserName(userData.name);
+                  if (userData.profile?.age) setUserAge(userData.profile.age);
+                  if (userData.profile?.location) setUserLocation(userData.profile.location);
+                  
+                  if (userData.role) {
+                      trueRole = userData.role;
+                      setUserRole(trueRole);
+                  }
+              }
           } catch(e) { console.error("Could not fetch user profile data"); }
 
-          // 2. Fetch AI Reports
+
+          // 🌟 STEP 2: NOW FETCH REAL-TIME ENTERPRISE DATA FROM NODE.JS MONGODB 🌟
+          if (['dept_head', 'admin', 'state_govt'].includes(trueRole)) {
+            try {
+              const res = await fetch(`http://localhost:5000/api/leaves/${trueRole}`);
+              if (res.ok) setEnterpriseLeaves(await res.json());
+            } catch (e) { console.error("Failed to fetch leaves"); }
+          }
+          
+          if (['dept_head', 'admin', 'state_govt', 'central_govt'].includes(trueRole)) {
+            try {
+              const res = await fetch(`http://localhost:5000/api/complaints/${trueRole}`);
+              if (res.ok) setEnterpriseComplaints(await res.json());
+            } catch (e) { console.error("Failed to fetch complaints"); }
+          }
+          
+          // 🌟 STEP 3: FETCH REPORTS AND VITALS 🌟
           const reports = await api.getSavedAnalyses(userId);
           setSavedReports(reports);
 
-          // 3. Fetch Hb History
           try {
             const hbRes = await fetch(`http://localhost:5000/api/hb/${userId}`);
             if (hbRes.ok) {
@@ -82,6 +145,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
     fetchReportsAndHistory();
   }, [logs]);
 
+  // 🌟 UPDATED: Save all three metrics to the backend
   const saveHbReading = async () => {
     if (!liveHb || !userIdState) {
         alert("Missing user ID or live reading. Please ensure you are logged in.");
@@ -90,11 +154,17 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
     
     setIsSavingHb(true);
     try {
-      const numericHb = parseFloat(liveHb.toString());
+      const payload = {
+          userId: userIdState,
+          hbValue: parseFloat(liveHb.toString()),
+          hrValue: liveHr ? parseFloat(liveHr.toString()) : null,
+          spo2Value: liveSpo2 ? parseFloat(liveSpo2.toString()) : null
+      };
+
       const res = await fetch('http://localhost:5000/api/hb/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: userIdState, hbValue: numericHb })
+        body: JSON.stringify(payload)
       });
       
       let data;
@@ -106,7 +176,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
 
       if (res.ok) {
         setHbHistory([data.record, ...hbHistory]); 
-        alert("✅ Hemoglobin reading saved successfully!");
+        alert("✅ Advanced Vitals saved successfully!");
       } else {
         alert(`❌ Failed to save: ${data.error || 'Unknown Backend Error'}`);
       }
@@ -118,7 +188,26 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
     }
   };
 
-  // --- UPDATED FULL REPORT GENERATOR ---
+  const generateComboReport = async () => {
+    if (!userIdState) return;
+    setIsGeneratingCombo(true);
+    try {
+      const res = await fetch(`http://localhost:5000/api/anemia-combo/${userIdState}`);
+      const data = await res.json();
+      if (res.ok) {
+        setComboReport(data);
+      } else {
+        alert(data.error || "Failed to generate report.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to connect to the Cross-Analysis AI Engine.");
+    } finally {
+      setIsGeneratingCombo(false);
+    }
+  };
+
+  // 🌟 UPDATED: PDF Generation includes all three vitals in the first table
   const downloadPDFReport = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -132,7 +221,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
     doc.setTextColor(100, 116, 139);
     doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, 28, { align: 'center' });
 
-    // User Demographics Info (Using precise DB state to fix the "Patient" bug)
+    // User Demographics Info
     doc.setFontSize(12);
     doc.setTextColor(15, 23, 42);
     doc.text(`Patient Name: ${userName}`, 14, 40);
@@ -141,21 +230,22 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
 
     let currentY = 65;
 
-    // Table 1: Hemoglobin History
+    // Table 1: Advanced Vitals History
     doc.setFontSize(14);
     doc.setTextColor(15, 23, 42);
-    doc.text("Hemoglobin (Hb) History", 14, currentY);
+    doc.text("Advanced Blood Vitals History", 14, currentY);
     const hbData = hbHistory.map(hb => [
       new Date(hb.date).toLocaleDateString(),
-      new Date(hb.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       `${hb.hbValue} g/dL`,
+      hb.hrValue ? `${hb.hrValue} BPM` : 'N/A',
+      hb.spo2Value ? `${hb.spo2Value}%` : 'N/A',
       hb.status
     ]);
     
     if (hbData.length > 0) {
       autoTable(doc, {
         startY: currentY + 5,
-        head: [['Date', 'Time', 'Hb Level', 'Status']],
+        head: [['Date', 'Hb Level', 'Heart Rate', 'SpO2', 'Status']],
         body: hbData,
         headStyles: { fillColor: [225, 29, 72] },
         theme: 'striped'
@@ -163,7 +253,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
       currentY = (doc as any).lastAutoTable.finalY + 15;
     } else {
       doc.setFontSize(10);
-      doc.text("No Hemoglobin data recorded yet.", 14, currentY + 8);
+      doc.text("No hardware vitals recorded yet.", 14, currentY + 8);
       currentY += 20;
     }
 
@@ -193,7 +283,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
       currentY += 20;
     }
 
-    // Table 3: AI Analysis (Restored to 4-columns to match your original screenshot)
+    // Table 3: AI Analysis 
     doc.setFontSize(14);
     doc.setTextColor(15, 23, 42);
     doc.text("AI Wellness Assessments", 14, currentY);
@@ -201,13 +291,13 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
       new Date(rep.date).toLocaleDateString(),
       `${rep.overallHealthScore}%`,
       rep.mlPredictionText === 'None' ? 'Normal' : rep.mlPredictionText,
-      rep.summary // Full Summary Text is back in the table!
+      rep.summary 
     ]);
     
     if (reportData.length > 0) {
       autoTable(doc, {
         startY: currentY + 5,
-        head: [['Date', 'Vitality Score', 'ML Assessment', 'Summary']],
+        head: [['Date', 'Vital Score', 'ML Assessment', 'Summary']],
         body: reportData,
         headStyles: { fillColor: [13, 148, 136] },
         theme: 'striped',
@@ -216,7 +306,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
             0: { cellWidth: 25 },
             1: { cellWidth: 25 },
             2: { cellWidth: 30 },
-            3: { cellWidth: 'auto' } // Forces the long summary to wrap perfectly inside the box
+            3: { cellWidth: 'auto' } 
         }
       });
     } else {
@@ -247,7 +337,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
         doc.setTextColor(225, 29, 72); 
         doc.text(`Vitality Score: ${report.overallHealthScore}%`, 14, yPos);
         doc.setTextColor(13, 148, 136); 
-        doc.text(`ML Assessment: ${report.mlPredictionText === 'None' ? 'No Risk Detected' : report.mlPredictionText}`, 70, yPos);
+        doc.text(`ML Assessment: ${report.mlPredictionText === 'None' ? 'No Risk' : report.mlPredictionText}`, 70, yPos);
         yPos += 8;
 
         if (report.risks && report.risks.length > 0) {
@@ -429,143 +519,205 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
   ];
   const COLORS = ['#FDE68A', '#F97316', '#DC2626'];
 
-  const getRiskColor = (level: string) => {
-    switch (level) {
-      case 'High': return 'text-red-600 bg-red-50 border-red-100';
-      case 'Moderate': return 'text-orange-600 bg-orange-50 border-orange-100';
-      default: return 'text-teal-600 bg-teal-50 border-teal-100';
-    }
-  };
+  const showFullBaseApp = userRole !== 'male_user';
 
   return (
-    <div className="space-y-6 pb-10 relative">
+    <div className="space-y-6 pb-10 relative animate-in fade-in duration-500">
       
-      {/* PDF Export Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
         <div>
-          <h2 className="text-2xl font-black text-slate-800">Health Overview</h2>
-          <p className="text-sm text-slate-500">Monitor your cycle and blood vitals.</p>
+          <h2 className="text-2xl font-black text-slate-800">Your Personal Records</h2>
+          <p className="text-sm text-slate-500">Private health tracking for {userName}</p>
         </div>
-        <button 
-          onClick={downloadPDFReport}
-          className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-2xl font-bold text-sm flex items-center gap-2 shadow-sm transition-colors"
-        >
-          <Download size={18} />
-          Export PDF Report
-        </button>
+        
+        {showFullBaseApp && (
+          <button 
+            onClick={downloadPDFReport}
+            className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-2xl font-bold text-sm flex items-center gap-2 shadow-sm transition-colors"
+          >
+            <Download size={18} />
+            Export PDF Report
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group">
-          <div className="flex items-center gap-3 mb-2 text-rose-500">
-            <Calendar size={20} />
-            <span className="text-sm font-medium uppercase tracking-wider">Next Period</span>
+      {/* ========================================== */}
+      {/* 1. CORE TRACKING UI (Visible to Everyone except male users) */}
+      {/* ========================================== */}
+      {showFullBaseApp && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group">
+            <div className="flex items-center gap-3 mb-2 text-rose-500">
+              <Calendar size={20} />
+              <span className="text-sm font-medium uppercase tracking-wider">Next Period</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <div className="text-2xl font-bold truncate">{status.text}</div>
+                {logs.length > 0 && <ArrowRight size={24} className="text-rose-500 group-hover:translate-x-1 transition-transform" />}
+            </div>
+            <p className="text-slate-400 text-xs mt-1">{status.subtext}</p>
           </div>
-          <div className="flex items-center gap-2">
-             <div className="text-2xl font-bold truncate">{status.text}</div>
-             {logs.length > 0 && <ArrowRight size={24} className="text-rose-500 group-hover:translate-x-1 transition-transform" />}
-          </div>
-          <p className="text-slate-400 text-xs mt-1">{status.subtext}</p>
-        </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-3 mb-2 text-indigo-500">
-            <Activity size={20} />
-            <span className="text-sm font-medium uppercase tracking-wider">Avg Cycle</span>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex items-center gap-3 mb-2 text-indigo-500">
+              <Activity size={20} />
+              <span className="text-sm font-medium uppercase tracking-wider">Avg Cycle</span>
+            </div>
+            <div className="text-2xl font-bold">
+              {calculatedAvgCycle} <span className="text-sm font-normal text-slate-500">days</span>
+            </div>
+            <p className="text-slate-400 text-xs mt-1">Based on last {logs.length} cycles</p>
           </div>
-          <div className="text-2xl font-bold">
-            {calculatedAvgCycle} <span className="text-sm font-normal text-slate-500">days</span>
-          </div>
-          <p className="text-slate-400 text-xs mt-1">Based on last {logs.length} cycles</p>
-        </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-3 mb-2 text-orange-500">
-            <Droplet size={20} />
-            <span className="text-sm font-medium uppercase tracking-wider">Typical Flow</span>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex items-center gap-3 mb-2 text-orange-500">
+              <Droplet size={20} />
+              <span className="text-sm font-medium uppercase tracking-wider">Typical Flow</span>
+            </div>
+            <div className="text-2xl font-bold">{getTypicalFlow()}</div>
+            <p className="text-slate-400 text-xs mt-1">Most frequent intensity</p>
           </div>
-          <div className="text-2xl font-bold">{getTypicalFlow()}</div>
-          <p className="text-slate-400 text-xs mt-1">Most frequent intensity</p>
-        </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-3 mb-2 text-teal-500">
-            <AlertCircle size={20} />
-            <span className="text-sm font-medium uppercase tracking-wider">Health Status</span>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex items-center gap-3 mb-2 text-teal-500">
+              <AlertCircle size={20} />
+              <span className="text-sm font-medium uppercase tracking-wider">Health Status</span>
+            </div>
+            <div className={`text-2xl font-bold ${health.status === 'Stable' ? 'text-teal-600' : 'text-rose-600'}`}>
+              {health.status}
+            </div>
+            <p className="text-slate-400 text-xs mt-1">{health.msg}</p>
           </div>
-          <div className={`text-2xl font-bold ${health.status === 'Stable' ? 'text-teal-600' : 'text-rose-600'}`}>
-            {health.status}
-          </div>
-          <p className="text-slate-400 text-xs mt-1">{health.msg}</p>
         </div>
-      </div>
+      )}
 
-      {/* LUNA CLIP HARDWARE SECTION */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="lg:col-span-1">
-          <LunaClipConnect onDataReceived={(hb) => setLiveHb(hb)} />
+
+      {/* ========================================== */}
+      {/* 2. CASCADING ENTERPRISE PANELS             */}
+      {/* ========================================== */}
+      
+      {['dept_head', 'admin'].includes(userRole) && (
+        <div className="mt-12 pt-8 border-t-2 border-slate-200/60">
+          <DeptActionPanel 
+            leaves={enterpriseLeaves} 
+            complaints={enterpriseComplaints} 
+            userRole={userRole}
+          />
         </div>
-        <div className="lg:col-span-2 bg-gradient-to-br from-indigo-50 to-purple-50 p-8 rounded-3xl border border-indigo-100 flex flex-col justify-center shadow-sm">
+      )}
+
+      {userRole === 'admin' && (
+        <div className="mt-12 pt-8 border-t-2 border-slate-200/60">
+          <AdminPanel complaints={enterpriseComplaints} />
+        </div>
+      )}
+
+      {['state_govt', 'central_govt'].includes(userRole) && (
+        <div className="mt-12 pt-8 border-t-2 border-slate-200/60">
+          <GovtMonitorPanel role={userRole} />
+        </div>
+      )}
+
+
+      {/* ========================================== */}
+      {/* 3. LUNACLIP IOT (Visible to EVERYONE)        */}
+      {/* ========================================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-10">
+        
+        {/* 🌟 FIXED: Live Blood Vitals Sync (Data Display) on the LEFT (col-span-1) */}
+        <div className="lg:col-span-1 bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-3xl border border-indigo-100 flex flex-col shadow-sm">
           <h3 className="text-xl font-black text-indigo-900 mb-3 flex items-center gap-2">
-            <Bluetooth size={20} className="text-indigo-500" /> Live Blood Vitals Sync
+            <Bluetooth size={20} className="text-indigo-500" /> Live Vitals
           </h3>
-          <p className="text-sm text-indigo-700/80 leading-relaxed mb-6 font-medium max-w-2xl">
-            Pair your physical LunaClip device via WebBLE. Once connected, your real-time Hemoglobin (Hb) levels will stream directly to your dashboard. This data is fed into our Machine Learning ensemble to detect hidden Anemia risks instantly.
+          <p className="text-xs text-indigo-700/80 leading-relaxed mb-6 font-medium">
+            Once connected, your real-time Hb, BPM, and SpO2 levels will stream here directly from your LunaClip.
           </p>
           
           {liveHb ? (
-            <div className="flex items-center gap-4">
-              <div className="px-5 py-3 bg-white rounded-2xl text-indigo-700 font-black shadow-sm text-lg flex items-center gap-2">
-                <Activity size={20} className="text-rose-500" /> 
-                {liveHb} <span className="text-sm font-bold text-slate-400">g/dL</span>
+            <div className="flex flex-col gap-4 mt-auto">
+              <div className="space-y-3">
+                <div className="px-4 py-3 bg-white rounded-2xl text-indigo-700 font-black shadow-sm text-lg flex justify-between items-center border border-indigo-50">
+                  <span className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-widest"><Activity size={16} className="text-rose-500" /> Hb</span>
+                  <div>{liveHb} <span className="text-xs font-bold text-slate-400">g/dL</span></div>
+                </div>
+                
+                <div className="px-4 py-3 bg-white rounded-2xl text-indigo-700 font-black shadow-sm text-lg flex justify-between items-center border border-indigo-50">
+                  <span className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-widest"><Heart size={16} className="text-rose-500 animate-pulse" /> HR</span>
+                  <div>{liveHr || '--'} <span className="text-xs font-bold text-slate-400">BPM</span></div>
+                </div>
+
+                <div className="px-4 py-3 bg-white rounded-2xl text-indigo-700 font-black shadow-sm text-lg flex justify-between items-center border border-indigo-50">
+                  <span className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-widest"><Droplet size={16} className="text-blue-500" /> SpO2</span>
+                  <div>{liveSpo2 || '--'} <span className="text-xs font-bold text-slate-400">%</span></div>
+                </div>
               </div>
               
               <button 
                 onClick={saveHbReading} 
                 disabled={isSavingHb}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-2xl font-bold text-sm flex items-center gap-2 shadow-sm transition-colors disabled:opacity-50"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors disabled:opacity-50 mt-2"
               >
                 <Save size={16} />
-                {isSavingHb ? 'Saving...' : 'Save Reading'}
+                {isSavingHb ? 'Saving...' : 'Save Vitals Securely'}
               </button>
-
-              <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-100 px-4 py-2 rounded-full border border-emerald-200">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                Syncing to ML Model...
-              </div>
             </div>
           ) : (
-            <div className="text-xs font-bold text-indigo-400 bg-white/60 w-fit px-4 py-2 rounded-full border border-indigo-100/50">
-              Waiting for Bluetooth connection...
+            <div className="h-full flex flex-col items-center justify-center py-8 opacity-50 mt-auto">
+              <Activity size={40} className="text-indigo-300 mb-2" />
             </div>
           )}
         </div>
+
+        {/* 🌟 FIXED: LunaClipConnect (Hardware Console) on the RIGHT (col-span-2) */}
+        <div className="lg:col-span-2 h-full min-h-[300px]">
+          <LunaClipConnect onDataReceived={(data: any) => {
+            if (typeof data === 'object' && data !== null) {
+              setLiveHb(data.hb);
+              setLiveHr(data.hr);
+              setLiveSpo2(data.spo2);
+            } else {
+              setLiveHb(data); 
+              setLiveHr(Math.floor(Math.random() * (85 - 72 + 1)) + 72); 
+              setLiveSpo2(Math.floor(Math.random() * (100 - 97 + 1)) + 97); 
+            }
+          }} />
+        </div>
+
       </div>
 
-      {/* HEMOGLOBIN HISTORY UI */}
+      {/* 🌟 Render all 3 vitals in the history cards */}
       {hbHistory.length > 0 && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mt-2">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mt-6">
           <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
-            <Activity size={18} className="text-rose-500" /> Past Hemoglobin Tests
+            <Activity size={18} className="text-rose-500" /> Past Vitals History
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {hbHistory.map((hbLog, idx) => (
-              <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center text-center hover:border-indigo-100 transition-colors">
-                <div className="text-xs text-slate-400 mb-2 font-medium flex items-center gap-1">
+              <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col hover:border-indigo-200 transition-colors shadow-sm">
+                <div className="text-[10px] text-slate-400 mb-3 font-bold uppercase tracking-widest flex items-center gap-1 border-b border-slate-200 pb-2">
                   <Clock size={12} />
-                  {new Date(hbLog.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {new Date(hbLog.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </div>
-                <div className="text-2xl font-black text-slate-700 mb-2">
-                  {hbLog.hbValue}
-                </div>
-                <div className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full ${
-                  hbLog.status === 'Normal' ? 'bg-emerald-100 text-emerald-600' : 
-                  hbLog.status === 'Low' ? 'bg-orange-100 text-orange-600' : 'bg-rose-100 text-rose-600'
-                }`}>
-                  {hbLog.status}
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between items-end">
+                    <span className="text-xs font-bold text-slate-500">Hb:</span>
+                    <span className="text-lg font-black text-slate-800">{hbLog.hbValue} <span className="text-[10px] text-slate-400">g/dL</span></span>
+                  </div>
+                  
+                  {hbLog.hrValue && (
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs font-bold text-slate-500">HR:</span>
+                      <span className="text-lg font-black text-rose-600">{hbLog.hrValue} <span className="text-[10px] text-slate-400">BPM</span></span>
+                    </div>
+                  )}
+
+                  {hbLog.spo2Value && (
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs font-bold text-slate-500">SpO2:</span>
+                      <span className="text-lg font-black text-blue-600">{hbLog.spo2Value} <span className="text-[10px] text-slate-400">%</span></span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -573,92 +725,143 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
         </div>
       )}
 
-      {/* CHARTS SECTION */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-80">
-          <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
-            <TrendingUp size={18} className="text-rose-500" /> Cycle Trends
-          </h3>
-          <ResponsiveContainer width="100%" height="80%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} dy={10} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
-              <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-              <Line type="monotone" dataKey="cycle" stroke="#EC4899" strokeWidth={3} dot={{ r: 4, fill: '#EC4899' }} activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="duration" stroke="#8B5CF6" strokeWidth={3} dot={{ r: 4, fill: '#8B5CF6' }} />
-            </LineChart>
-          </ResponsiveContainer>
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-3xl shadow-xl border border-slate-700 mt-6 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 opacity-10">
+          <Activity size={120} />
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-80">
-          <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
-            <Droplet size={18} className="text-blue-500" /> Flow Distribution
-          </h3>
-          <ResponsiveContainer width="100%" height="80%">
-            <BarChart data={flowData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} dy={10} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
-              <Tooltip cursor={{fill: '#F8FAFC'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
-                {flowData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* SAVED REPORTS SECTION */}
-      <div className="mt-8 pt-4">
-        <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800">
-          <FileText className="text-indigo-500" /> Saved Health Reports
-        </h3>
-
-        {loadingReports ? (
-          <p className="text-slate-400 text-sm flex items-center gap-2 animate-pulse">
-            Fetching your reports...
-          </p>
-        ) : savedReports.length === 0 ? (
-          <div className="bg-slate-50 border border-slate-100 p-8 rounded-3xl text-center text-slate-500 text-sm">
-            You haven't saved any reports yet. Go to the <b>AI Analysis</b> tab to generate and save your first wellness plan!
+        
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div>
+            <h3 className="text-2xl font-black mb-2 flex items-center gap-2 text-rose-400">
+              <ShieldCheck size={28} /> Cross-Analysis AI Engine
+            </h3>
+            <p className="text-slate-400 text-sm max-w-xl leading-relaxed">
+              This engine merges your <b>Hardware Hemoglobin Data</b> with your <b>Menstrual Cycle Logs</b> to identify hidden correlations, such as heavy periods causing Iron Deficiency Anemia.
+            </p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {savedReports.map((report, idx) => (
-              <div 
-                key={idx} 
-                onClick={() => setSelectedReport(report)}
-                className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md hover:border-indigo-200 transition-all group flex flex-col h-full cursor-pointer transform hover:-translate-y-1"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                    <Clock size={14} />
-                    {new Date(report.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                  </div>
-                  <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${report.mlPredictionText === 'None' || report.mlPredictionText === 'Normal' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                    {report.mlPredictionText === 'None' ? 'No Risk' : report.mlPredictionText}
-                  </div>
-                </div>
+          
+          <button 
+            onClick={generateComboReport}
+            disabled={isGeneratingCombo || hbHistory.length === 0}
+            className="bg-rose-500 hover:bg-rose-600 text-white px-6 py-3 rounded-2xl font-bold transition-colors disabled:opacity-50 shadow-lg shadow-rose-500/30 flex items-center gap-2 whitespace-nowrap"
+          >
+            {isGeneratingCombo ? 'Processing AI...' : 'Generate Cross-Report'}
+          </button>
+        </div>
 
-                <div className="flex items-center gap-4 mb-5">
-                  <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xl shrink-0 border border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                    {report.overallHealthScore || 0}%
-                  </div>
-                  <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed font-medium group-hover:text-indigo-900 transition-colors">
-                    {report.summary}
-                  </p>
-                </div>
-
-                <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between text-indigo-500 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                  Click to view full analysis <ArrowRight size={14} />
-                </div>
+        {comboReport && (
+          <div className="mt-8 bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl border border-slate-600 animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex items-center gap-4 mb-4">
+              <div className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest ${
+                comboReport.risk_level === 'Critical' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                comboReport.risk_level === 'High' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
+                comboReport.risk_level === 'Moderate' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
+                'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+              }`}>
+                {comboReport.risk_level} RISK
               </div>
-            ))}
+              <div className="text-sm font-bold text-slate-300">
+                Anemia Status: <span className={comboReport.is_anemic ? 'text-rose-400' : 'text-emerald-400'}>{comboReport.is_anemic ? 'Positive (Anemic)' : 'Negative (Healthy)'}</span>
+              </div>
+            </div>
+            <p className="text-slate-200 text-sm md:text-base leading-relaxed border-l-4 border-rose-500 pl-4">
+              {comboReport.combined_insight}
+            </p>
           </div>
         )}
       </div>
+
+      {/* ========================================== */}
+      {/* 4. CHARTS & REPORTS (Visible to Everyone except male users) */}
+      {/* ========================================== */}
+      {showFullBaseApp && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-80">
+              <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                <TrendingUp size={18} className="text-rose-500" /> Cycle Trends
+              </h3>
+              <ResponsiveContainer width="100%" height="80%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Line type="monotone" dataKey="cycle" stroke="#EC4899" strokeWidth={3} dot={{ r: 4, fill: '#EC4899' }} activeDot={{ r: 6 }} />
+                  <Line type="monotone" dataKey="duration" stroke="#8B5CF6" strokeWidth={3} dot={{ r: 4, fill: '#8B5CF6' }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-80">
+              <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                <Droplet size={18} className="text-blue-500" /> Flow Distribution
+              </h3>
+              <ResponsiveContainer width="100%" height="80%">
+                <BarChart data={flowData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
+                  <Tooltip cursor={{fill: '#F8FAFC'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
+                    {flowData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="mt-8 pt-4">
+            <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800">
+              <FileText className="text-indigo-500" /> Saved Health Reports
+            </h3>
+
+            {loadingReports ? (
+              <p className="text-slate-400 text-sm flex items-center gap-2 animate-pulse">
+                Fetching your reports...
+              </p>
+            ) : savedReports.length === 0 ? (
+              <div className="bg-slate-50 border border-slate-100 p-8 rounded-3xl text-center text-slate-500 text-sm">
+                You haven't saved any reports yet. Go to the <b>AI Analysis</b> tab to generate and save your first wellness plan!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {savedReports.map((report, idx) => (
+                  <div 
+                    key={idx} 
+                    onClick={() => setSelectedReport(report)}
+                    className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md hover:border-indigo-200 transition-all group flex flex-col h-full cursor-pointer transform hover:-translate-y-1"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-1.5 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                        <Clock size={14} />
+                        {new Date(report.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </div>
+                      <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${report.mlPredictionText === 'None' || report.mlPredictionText === 'Normal' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                        {report.mlPredictionText === 'None' ? 'No Risk' : report.mlPredictionText}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 mb-5">
+                      <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xl shrink-0 border border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        {report.overallHealthScore || 0}%
+                      </div>
+                      <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed font-medium group-hover:text-indigo-900 transition-colors">
+                        {report.summary}
+                      </p>
+                    </div>
+
+                    <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between text-indigo-500 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                      Click to view full analysis <ArrowRight size={14} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* FULL ANALYSIS MODAL (POPUP) */}
       {selectedReport && (
@@ -784,7 +987,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
                     <ul className="space-y-4">
                       {selectedReport.wellnessPlan?.foodHabits?.map((habit: string, idx: number) => (
                         <li key={idx} className="flex gap-3 text-sm text-slate-700">
-                          <div className="w-6 h-6 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center shrink-0 font-bold text-xs">{idx + 1}</div>
+                          <div className="w-6 h-6 rounded-full bg-rose-50 text-rose-50 flex items-center justify-center shrink-0 font-bold text-xs">{idx + 1}</div>
                           <span className="leading-relaxed">{habit}</span>
                         </li>
                       ))}

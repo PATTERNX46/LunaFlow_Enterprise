@@ -1,4 +1,3 @@
-
 export type FlowIntensity = 'Light' | 'Normal' | 'Heavy';
 export type PainLevel = 'Low' | 'Medium' | 'High';
 
@@ -7,6 +6,17 @@ export interface User {
   email: string;
   password?: string;
   name: string;
+  // ✅ NEW: Added for Enterprise & Govt routing (optional so old users don't break)
+  role?: string; 
+}
+
+// ✅ NEW: Added for the Department/Admin Dashboards
+export interface LeaveRequest {
+  id: number;
+  studentId: string;
+  risk: 'High' | 'Medium' | 'Low';
+  hbLevel: number;
+  status: string;
 }
 
 export interface PeriodLog {

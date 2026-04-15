@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { api } from '../services/api'; // storage বাদ দিয়ে api ব্যবহার করছি
-import { Heart, Mail, Lock, User as UserIcon, ArrowRight, AlertCircle } from 'lucide-react';
+import { api } from '../services/api'; // storage বাদ দিয়ে api ব্যবহার করছি
+import { Heart, Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 
 interface Props {
   onLogin: (user: User) => void;
@@ -9,38 +9,63 @@ interface Props {
 
 const Auth: React.FC<Props> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(''); // Works for both email AND Institute ID
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
     try {
       if (isLogin) {
-        // Login request
-        const user = await api.login(email, password);
-        // MongoDB এর '_id' কে 'id' তে কনভার্ট করে সেভ করছি
-        const mappedUser = { ...user, id: user._id };
-        localStorage.setItem('lunaflow_session', JSON.stringify(mappedUser));
-        onLogin(mappedUser);
+        // --- UNIFIED LOGIN LOGIC ---
+        // If the user inputs an email (contains '@'), we use your existing Node.js API.
+        // If they input an Institute ID (no '@', like 'dept_head'), we use the new Python API.
+        
+        if (email.includes('@')) {
+          // Standard User Login (Your existing logic)
+          const user = await api.login(email, password);
+          const mappedUser = { ...user, id: user._id, role: 'female_user' }; // Default role for standard users
+          localStorage.setItem('lunaflow_session', JSON.stringify(mappedUser));
+          onLogin(mappedUser);
+        } else {
+          // Institutional/Government Login (New Python Backend)
+          const response = await fetch('http://localhost:8000/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: email, password: password }),
+          });
+
+          if (response.ok) {
+            const userData: User = await response.json();
+            localStorage.setItem('lunaflow_session', JSON.stringify(userData));
+            onLogin(userData);
+          } else {
+            throw new Error("Invalid Institutional Credentials");
+          }
+        }
       } else {
-        // Register request
+        // Register request (Your existing logic)
         if (!name || !email || !password) {
           setError('Please fill in all fields.');
+          setIsLoading(false);
           return;
         }
         const newUserRequest = { id: '', email, password, name };
         const savedUser = await api.register(newUserRequest);
-        const mappedUser = { ...savedUser, id: savedUser._id };
+        const mappedUser = { ...savedUser, id: savedUser._id, role: 'female_user' };
         localStorage.setItem('lunaflow_session', JSON.stringify(mappedUser));
         onLogin(mappedUser);
       }
     } catch (err: any) {
-      setError('Authentication failed. Check email/password or server connection.');
+      setError('Authentication failed. Check credentials or server connection.');
       console.error(err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -75,10 +100,11 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
             )}
 
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              {/* Changed icon context slightly to imply it takes IDs as well */}
+              <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input
-                type="email"
-                placeholder="Email Address"
+                type="text" // Changed from 'email' to 'text' so it accepts 'dept_head'
+                placeholder="Email Address or Institute ID"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all"
@@ -105,10 +131,11 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
 
             <button
               type="submit"
-              className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-rose-200 transition-all flex items-center justify-center gap-2 group"
+              disabled={isLoading}
+              className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-rose-200 transition-all flex items-center justify-center gap-2 group disabled:opacity-70"
             >
-              {isLogin ? 'Login' : 'Create Account'}
-              <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+              {isLoading ? <Loader2 size={20} className="animate-spin" /> : (isLogin ? 'Login' : 'Create Account')}
+              {!isLoading && <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />}
             </button>
           </form>
 
