@@ -17,39 +17,41 @@ const ProfileWidget: React.FC<ProfileWidgetProps> = ({ user, onUpdateUser }) => 
   const [location, setLocation] = useState(user?.profile?.location || '');
 
   // Handle saving the updated profile to the backend
-  const handleSaveProfile = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`http://localhost:5000/api/profile/${user.id || (user as any)._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile: {
-            ...user.profile,
-            age: age,
-            location: location,
-          }
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Update the global state in App.tsx
-        if (onUpdateUser) {
-          onUpdateUser({ ...user, profile: data.profile });
+const handleSaveProfile = async () => {
+  setIsLoading(true);
+  try {
+    const backendUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
+    
+    // Corrected fetch call without the literal { ... } placeholder
+    const response = await fetch(`${backendUrl}/api/profile/${user.id || (user as any)._id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile: {
+          ...user.profile, // (This ... is correct, it's a spread operator!)
+          age: age,
+          location: location,
         }
-        setIsEditing(false); // Switch back to view mode
-      } else {
-        alert("Failed to update profile. Please try again.");
-      }
-    } catch (error) {
-      console.error("Error saving profile:", error);
-      alert("Network error. Please check your connection.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      })
+    });
 
+    if (response.ok) {
+      const data = await response.json();
+      // Update the global state in App.tsx
+      if (onUpdateUser) {
+        onUpdateUser({ ...user, profile: data.profile });
+      }
+      setIsEditing(false); // Switch back to view mode
+    } else {
+      alert("Failed to update profile. Please try again.");
+    }
+  } catch (error) {
+    console.error("Error saving profile:", error);
+    alert("Network error. Please check your connection.");
+  } finally {
+    setIsLoading(false);
+  }
+};
   return (
     <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm relative transition-all duration-300">
       
