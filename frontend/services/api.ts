@@ -3,6 +3,7 @@ import { User, PeriodLog, UserProfile } from '../types';
 // Use the environment variable if it exists, otherwise use localhost
 
    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+   const ML_URL = import.meta.env.VITE_ML_URL || 'http://127.0.0.1:8000';
 export const api = {
   login: async (email: string, password: string) => {
     const res = await fetch(`${API_URL}/auth/login`, {
@@ -86,7 +87,10 @@ export const api = {
 
     try {
       // 2. Call the Python FastAPI Server directly!
-      const res = await fetch('http://127.0.0.1:8000/predict_health_risk', {
+      // 2. Call the Python FastAPI Server directly!
+      // 🌟 FIXED: Now uses the dynamic environment variable instead of localhost
+      const res = await fetch(`${ML_URL}/predict_health_risk`, {
+        
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formattedData),
