@@ -1,0 +1,36 @@
+{
+  "name": "lunaflow-tracker",
+  "private": true,
+  "version": "1.0.0",
+  "homepage": "https://shibashisdas76.github.io/LunaFlow",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
+  },
+  "dependencies": {
+    "@google/genai": "^1.38.0",
+    "emailjs-com": "^3.2.0",
+    "jspdf": "^4.2.0",
+    "jspdf-autotable": "^5.0.7",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.563.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-leaflet": "^5.0.0",
+    "react-router-dom": "^7.13.1",
+    "recharts": "^3.7.0"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.21",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/web-bluetooth": "^0.0.21",
+    "gh-pages": "^6.3.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
+  }
+}
