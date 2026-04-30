@@ -16,7 +16,7 @@ interface Props {
   logs: PeriodLog[];
   profile: UserProfile;
 }
-
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const Dashboard: React.FC<Props> = ({ logs, profile }) => {
   const [savedReports, setSavedReports] = useState<any[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
@@ -95,7 +95,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
 
           // 🌟 STEP 1: FETCH TRUE ROLE FROM MONGODB FIRST! 🌟
           try {
-              const userRes = await fetch(`http://localhost:5000/api/data/${userId}`);
+              const userRes = await fetch(`${API_URL}/data/${userId}`);
               if (userRes.ok) {
                   const userData = await userRes.json();
                   if (userData.name) setUserName(userData.name);
@@ -113,14 +113,14 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
           // 🌟 STEP 2: NOW FETCH REAL-TIME ENTERPRISE DATA FROM NODE.JS MONGODB 🌟
           if (['dept_head', 'admin', 'state_govt'].includes(trueRole)) {
             try {
-              const res = await fetch(`http://localhost:5000/api/leaves/${trueRole}`);
+              const res = await fetch(`${API_URL}/leaves/${trueRole}`);
               if (res.ok) setEnterpriseLeaves(await res.json());
             } catch (e) { console.error("Failed to fetch leaves"); }
           }
           
           if (['dept_head', 'admin', 'state_govt', 'central_govt'].includes(trueRole)) {
             try {
-              const res = await fetch(`http://localhost:5000/api/complaints/${trueRole}`);
+              const res = await fetch(`${API_URL}/complaints/${trueRole}`);
               if (res.ok) setEnterpriseComplaints(await res.json());
             } catch (e) { console.error("Failed to fetch complaints"); }
           }
@@ -130,7 +130,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
           setSavedReports(reports);
 
           try {
-            const hbRes = await fetch(`http://localhost:5000/api/hb/${userId}`);
+            const hbRes = await fetch(`${API_URL}/hb/${userId}`);
             if (hbRes.ok) {
               const hbData = await hbRes.json();
               if (Array.isArray(hbData)) setHbHistory(hbData);
@@ -165,7 +165,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
           spo2Value: liveSpo2 ? parseFloat(liveSpo2.toString()) : null
       };
 
-      const res = await fetch('http://localhost:5000/api/hb/save', {
+      const res = await fetch(`${API_URL}/hb/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -196,7 +196,7 @@ const Dashboard: React.FC<Props> = ({ logs, profile }) => {
     if (!userIdState) return;
     setIsGeneratingCombo(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/anemia-combo/${userIdState}`);
+      const res = await fetch(`${API_URL}/anemia-combo/${userIdState}`);
       const data = await res.json();
       if (res.ok) {
         setComboReport(data);

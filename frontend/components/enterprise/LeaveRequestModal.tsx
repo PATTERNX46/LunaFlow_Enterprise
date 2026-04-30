@@ -5,7 +5,7 @@ interface Props {
   onClose: () => void;
   user?: any;
 }
-
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const LeaveRequestModal: React.FC<Props> = ({ onClose, user }) => {
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,10 +43,12 @@ const LeaveRequestModal: React.FC<Props> = ({ onClose, user }) => {
 
         setApplicantData({ id: currentId, name: currentName, role: currentRole });
 
-        const [reportRes, hbRes] = await Promise.all([
-          fetch(`http://localhost:5000/api/analysis/${currentId}`),
-          fetch(`http://localhost:5000/api/hb/${currentId}`)
-        ]);
+       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+const [reportRes, hbRes] = await Promise.all([
+    fetch(`${API_URL}/analysis/${currentId}`),
+    fetch(`${API_URL}/hb/${currentId}`)
+]);
         
         const reports = await reportRes.json();
         const hbs = await hbRes.json();
@@ -89,7 +91,7 @@ const LeaveRequestModal: React.FC<Props> = ({ onClose, user }) => {
     };
 
     try {
-      const res = await fetch('http://localhost:5000/api/leaves', {
+      const res = await fetch(`${API_URL}/leaves`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

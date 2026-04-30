@@ -4,7 +4,7 @@ import { AlertTriangle, Camera, MapPin, Send, Loader2, CheckCircle2 } from 'luci
 interface Props {
   user?: any;
 }
-
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 export default function ComplaintForm({ user }: Props) {
   const [issueType, setIssueType] = useState('washroom');
   const [description, setDescription] = useState('');
@@ -66,7 +66,7 @@ export default function ComplaintForm({ user }: Props) {
       };
 
       // 3. Send to Backend
-      const res = await fetch('http://localhost:5000/api/complaints', {
+      const res = await fetch(`${API_URL}/complaints`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

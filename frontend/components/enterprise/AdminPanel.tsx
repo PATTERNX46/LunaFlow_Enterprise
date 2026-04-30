@@ -4,7 +4,7 @@ import { Building, FileWarning, BarChart, CheckCircle2, Calendar, Activity, Aler
 interface Props {
   complaints: any[];
 }
-
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 export default function AdminPanel({ complaints }: Props) {
   const [leaves, setLeaves] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -12,7 +12,7 @@ export default function AdminPanel({ complaints }: Props) {
   // Fetch all Leave Requests from the database on component mount
   const fetchLeaves = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/leaves');
+      const res = await fetch(`${API_URL}/leaves`);
       const data = await res.json();
       setLeaves(data);
     } catch (err) {

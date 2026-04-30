@@ -25,6 +25,7 @@ export default function DeptActionPanel({ leaves, complaints = [], userRole = 'd
   // ==========================================
   // 1. LEAVE LOGIC (Unchanged)
   // ==========================================
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
   const triggerWhatsAppAlert = async (studentId: string) => {
     setLoadingAlert(studentId);
     try {
@@ -49,7 +50,7 @@ export default function DeptActionPanel({ leaves, complaints = [], userRole = 'd
 
   const handleApprove = async (leaveId: string) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/leaves/${leaveId}/status`, {
+      const res = await fetch(`${API_URL}/leaves/${leaveId}/status`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify({ status: 'Approved' })
       });
@@ -64,7 +65,7 @@ export default function DeptActionPanel({ leaves, complaints = [], userRole = 'd
   const handleDecline = async (leaveId: string) => {
     if (window.confirm(`❌ Are you sure you want to DECLINE this leave request?`)) {
       try {
-        const res = await fetch(`http://localhost:5000/api/leaves/${leaveId}/status`, {
+        const res = await fetch(`${API_URL}/leaves/${leaveId}/status`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, 
           body: JSON.stringify({ status: 'Declined' })
         });
@@ -102,7 +103,7 @@ export default function DeptActionPanel({ leaves, complaints = [], userRole = 'd
         payload = { status: 'Forwarded', forwardTo: nextRole };
       }
 
-      const res = await fetch(`http://localhost:5000/api/complaints/${complaintId}/status`, {
+      const res = await fetch(`${API_URL}/complaints/${complaintId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
