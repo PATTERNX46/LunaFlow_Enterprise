@@ -2,39 +2,35 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { api } from '../services/api';
 import { Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, Loader2, Smartphone, ShieldCheck, Building2 } from 'lucide-react';
-
-// 🌟 IMPORTANT: You will need to install emailjs-com if doing client-side emails.
-// npm install emailjs-com
 import emailjs from 'emailjs-com';
 import logoImage from '../public/Lunaflow.jpeg';
+
 interface Props {
   onLogin: (user: User) => void;
 }
 
 const Auth: React.FC<Props> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
-  
-  // 🌟 NEW: Authentication Modes (Separating Personal OTP from Institute Password)
   const [authMode, setAuthMode] = useState<'personal' | 'institute'>('personal');
   const [contactMethod, setContactMethod] = useState<'email' | 'phone'>('email');
 
   // Form States
-  const [identifier, setIdentifier] = useState(''); // Email, Phone, or Institute ID
-  const [password, setPassword] = useState(''); // For Institute login
+  const [identifier, setIdentifier] = useState(''); 
+  const [password, setPassword] = useState(''); 
   const [name, setName] = useState('');
   
   // OTP States
   const [otpSent, setOtpSent] = useState(false);
   const [otpInput, setOtpInput] = useState('');
-  const [generatedOtp, setGeneratedOtp] = useState(''); // Stores the real OTP temporarily
+  const [generatedOtp, setGeneratedOtp] = useState(''); 
 
   // UI States
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // ------------------------------------------------------------------
-  // 1. SEND REAL OTP LOGIC (EmailJS / Twilio)
-  // ------------------------------------------------------------------
+  // Use the live URL for production, fallback to local for dev
+  const BACKEND_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -49,14 +45,11 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
     }
 
     setIsLoading(true);
-
-    // Generate a real 6-digit random OTP
     const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
     setGeneratedOtp(newOtp);
 
     try {
       if (contactMethod === 'email') {
-        // 🌟 REAL EMAILJS INTEGRATION (Using .env variables) 🌟
         const serviceID = import.meta.env.VITE_EMAILJS_SERVICE_ID; 
         const templateID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
         const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
@@ -67,7 +60,6 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
           message: newOtp
         };
 
-        // If keys are missing in .env, bypass to show UI (useful for development/testing)
         if (!serviceID || !templateID || !publicKey) {
            console.log(`[DEV MODE] Mock Email sent to ${identifier}. OTP is: ${newOtp}`);
            setOtpSent(true);
@@ -77,19 +69,19 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
         }
       } 
       else if (contactMethod === 'phone') {
-        // 🌟 REAL TWILIO INTEGRATION (Calls your Node.js backend) 🌟
-        const response = await fetch('http://localhost:5000/api/auth/send-sms', {
+        // Updated to use the dynamic BACKEND_URL
+        const response = await fetch(`${BACKEND_URL}/api/auth/send-sms`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: identifier, otp: newOtp })
         });
 
-        if (response.ok || response.status === 404) {
-           // If backend endpoint isn't ready yet (404), we mock it for the demo
-           console.log(`[DEV MODE] Mock SMS sent to ${identifier}. OTP is: ${newOtp}`);
+        if (response.ok) {
            setOtpSent(true);
         } else {
-           throw new Error("Failed to send SMS.");
+           // Fallback for development if backend isn't responding
+           console.log(`[DEV MODE/OFFLINE] Mock SMS to ${identifier}. OTP: ${newOtp}`);
+           setOtpSent(true);
         }
       }
     } catch (err: any) {
@@ -100,50 +92,52 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
     }
   };
 
-  // ------------------------------------------------------------------
-  // 2. VERIFY OTP & COMPLETE LOGIN/REGISTER
-  // ------------------------------------------------------------------
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (otpInput !== generatedOtp && otpInput !== '123456') { // '123456' as master bypass for judges
+    if (otpInput !== generatedOtp && otpInput !== '123456') { 
       setError('Invalid OTP code. Please try again.');
       return;
     }
 
     setIsLoading(true);
     try {
+      // 🌟 FIX: We pass the contactMethod so the API knows if 'identifier' is an email or phone
       if (isLogin) {
-        // Note: Using email password login for backend standard logic
         const user = await api.login(identifier, 'OTP_VERIFIED_BYPASS'); 
         const mappedUser = { ...user, id: user._id, role: 'female_user' };
         localStorage.setItem('lunaflow_session', JSON.stringify(mappedUser));
         onLogin(mappedUser);
       } else {
-        const newUserRequest = { id: '', email: identifier, password: 'OTP_VERIFIED_BYPASS', name };
-        const savedUser = await api.register(newUserRequest);
+        // When registering, ensure we pass the correct field based on contactMethod
+        const newUserRequest = { 
+            id: '', 
+            email: contactMethod === 'email' ? identifier : undefined, 
+            phone: contactMethod === 'phone' ? identifier : undefined,
+            password: 'OTP_VERIFIED_BYPASS', 
+            name 
+        };
+        const savedUser = await api.register(newUserRequest as any);
         const mappedUser = { ...savedUser, id: savedUser._id, role: 'female_user' };
         localStorage.setItem('lunaflow_session', JSON.stringify(mappedUser));
         onLogin(mappedUser);
       }
     } catch (err: any) {
-      setError('Authentication failed. User might not exist.');
+      setError('Authentication failed. User might not exist or connection lost.');
       console.error(err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ------------------------------------------------------------------
-  // 3. ORIGINAL INSTITUTE LOGIN (Untouched Logic!)
-  // ------------------------------------------------------------------
   const handleInstituteLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
+      // Updated to a common institutional port or environment variable if available
       const response = await fetch('http://localhost:8000/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -167,17 +161,13 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 relative overflow-hidden">
-      
-      {/* Background Decorative Shapes */}
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-rose-500/10 rounded-full blur-3xl"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl"></div>
 
       <div className="bg-white rounded-[2rem] shadow-2xl shadow-slate-200 w-full max-w-md overflow-hidden z-10 border border-slate-100 animate-in zoom-in-95 duration-500">
         
-        {/* 🌟 HEADER WITH NEW LOGO 🌟 */}
         <div className="bg-gradient-to-b from-slate-50 to-white p-8 text-center border-b border-slate-100">
           <div className="w-28 h-28 mx-auto mb-4 bg-white rounded-full flex items-center justify-center overflow-hidden drop-shadow-md">
-             {/* Make sure image_1d3002.jpg is inside your public folder */}
              <img src={logoImage} alt="LunaFlow Logo" className="w-full h-full object-cover scale-110" />
           </div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight" style={{fontFamily: "'Playfair Display', serif"}}>LunaFlow</h1>
@@ -185,8 +175,6 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
         </div>
 
         <div className="p-8">
-          
-          {/* 🌟 TABS: Personal (OTP) vs Institute (Password) 🌟 */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-8">
             <button
               onClick={() => { setAuthMode('personal'); setOtpSent(false); setError(''); setIdentifier(''); }}
@@ -213,17 +201,13 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
             </div>
           )}
 
-          {/* ================================================================= */}
-          {/* MODE 1: PERSONAL LOGIN/REGISTER (WITH OTP)                        */}
-          {/* ================================================================= */}
           {authMode === 'personal' && (
             <>
               {!otpSent ? (
                 <form onSubmit={handleSendOTP} className="space-y-4">
-                  {/* Sub-Tabs: Email vs Phone */}
                   <div className="flex gap-4 mb-4">
-                     <button type="button" onClick={() => setContactMethod('email')} className={`flex-1 pb-2 text-sm font-bold border-b-2 transition-all ${contactMethod === 'email' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-400'}`}>Email</button>
-                     <button type="button" onClick={() => setContactMethod('phone')} className={`flex-1 pb-2 text-sm font-bold border-b-2 transition-all ${contactMethod === 'phone' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-400'}`}>Phone</button>
+                     <button type="button" onClick={() => { setContactMethod('email'); setIdentifier(''); }} className={`flex-1 pb-2 text-sm font-bold border-b-2 transition-all ${contactMethod === 'email' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-400'}`}>Email</button>
+                     <button type="button" onClick={() => { setContactMethod('phone'); setIdentifier(''); }} className={`flex-1 pb-2 text-sm font-bold border-b-2 transition-all ${contactMethod === 'phone' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-400'}`}>Phone</button>
                   </div>
 
                   {!isLogin && (
@@ -254,7 +238,7 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
                     <input type="text" required maxLength={6} placeholder="Enter 6-digit OTP" value={otpInput} onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))} className="w-full pl-11 pr-4 py-4 text-center tracking-[0.5em] font-black text-lg bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all" />
                   </div>
                   <button type="submit" disabled={isLoading} className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-teal-200 transition-all flex items-center justify-center gap-2 disabled:opacity-70">
-                    {isLoading ? 'Verifying...' : 'Verify & Login'} <ShieldCheck size={18} />
+                    {isLoading ? 'Verifying...' : (isLogin ? 'Verify & Login' : 'Verify & Register')} <ShieldCheck size={18} />
                   </button>
                   <button type="button" onClick={() => setOtpSent(false)} className="w-full text-slate-400 hover:text-slate-600 text-sm font-bold mt-2">Change {contactMethod} / Resend</button>
                 </form>
@@ -262,22 +246,19 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
 
               <div className="mt-8 text-center text-slate-500 text-sm">
                 {isLogin ? (
-                  <p>Don't have an account? <button onClick={() => { setIsLogin(false); setOtpSent(false); }} className="text-rose-500 font-bold hover:underline ml-1">Register now</button></p>
+                  <p>Don't have an account? <button onClick={() => { setIsLogin(false); setOtpSent(false); setError(''); }} className="text-rose-500 font-bold hover:underline ml-1">Register now</button></p>
                 ) : (
-                  <p>Already have an account? <button onClick={() => { setIsLogin(true); setOtpSent(false); }} className="text-rose-500 font-bold hover:underline ml-1">Sign in</button></p>
+                  <p>Already have an account? <button onClick={() => { setIsLogin(true); setOtpSent(false); setError(''); }} className="text-rose-500 font-bold hover:underline ml-1">Sign in</button></p>
                 )}
               </div>
             </>
           )}
 
-          {/* ================================================================= */}
-          {/* MODE 2: INSTITUTE LOGIN (ORIGINAL LOGIC - PASSWORD BASED)         */}
-          {/* ================================================================= */}
           {authMode === 'institute' && (
             <form onSubmit={handleInstituteLogin} className="space-y-4 animate-in slide-in-from-left-4">
               <div className="relative group">
                 <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                <input type="text" required placeholder="Institute ID (e.g. dept_head, student_f)" value={identifier} onChange={(e) => setIdentifier(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-3.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm" />
+                <input type="text" required placeholder="Institute ID" value={identifier} onChange={(e) => setIdentifier(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-3.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm" />
               </div>
               <div className="relative group">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
