@@ -1,7 +1,8 @@
 import { User, PeriodLog, UserProfile } from '../types';
 
 // Use the environment variable if it exists, otherwise use localhost
-const API_URL = import.meta.env.VITE_API_URL || '';
+
+   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 export const api = {
   login: async (email: string, password: string) => {
     const res = await fetch(`${API_URL}/auth/login`, {
