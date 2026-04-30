@@ -29,13 +29,14 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
 // --- Database Models (Schemas) ---
 
 const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
+  // 🌟 FIX: Made email optional and added phone. Both are sparse so they don't conflict.
+  email: { type: String, unique: true, sparse: true },
+  phone: { type: String, unique: true, sparse: true },
   password: { type: String, required: true },
   name: String,
   user_id: String, // To support Python seeded IDs (STU-001, HOD-001, etc.)
   role: { type: String, default: 'female_user' }, 
   gender: String,
-  phone: String,
   profile: {
     age: { type: Number, default: 25 },
     averageCycleLength: { type: Number, default: 28 },
@@ -157,11 +158,19 @@ app.post('/api/auth/send-sms', async (req, res) => {
 // 1. Register
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, password, name } = req.body;
-    const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ error: "User already exists" });
+    const { email, phone, password, name } = req.body;
+    
+    // 🌟 FIX: Check if either email or phone already exists
+    const query = [];
+    if (email) query.push({ email });
+    if (phone) query.push({ phone });
 
-    const newUser = new User({ email, password, name });
+    if (query.length > 0) {
+      const existingUser = await User.findOne({ $or: query });
+      if (existingUser) return res.status(400).json({ error: "User already exists with this contact method" });
+    }
+
+    const newUser = new User({ email, phone, password, name });
     await newUser.save();
     res.json(newUser);
   } catch (err) {
@@ -172,9 +181,20 @@ app.post('/api/auth/register', async (req, res) => {
 // 2. Login
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email, password });
-    if (!user) return res.status(400).json({ error: "Invalid credentials" });
+    // 🌟 FIX: Frontend might send the identifier as 'email' due to legacy logic. 
+    // We treat it as a generic identifier and search BOTH fields.
+    const identifier = req.body.email || req.body.identifier; 
+    const password = req.body.password;
+
+    const user = await User.findOne({ 
+        $or: [
+            { email: identifier },
+            { phone: identifier }
+        ],
+        password: password 
+    });
+    
+    if (!user) return res.status(400).json({ error: "Invalid credentials or User might not exist" });
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: err.message });
