@@ -123,8 +123,10 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
         localStorage.setItem('lunaflow_session', JSON.stringify(mappedUser));
         onLogin(mappedUser);
       }
-    } catch (err: any) {
-      setError('Authentication failed. User might not exist or connection lost.');
+    }  catch (err: any) {
+      // 🌟 FIX: Try to show the actual error from the backend, otherwise fallback to a generic message
+      const errorMessage = err.response?.data?.error || err.message || 'Authentication failed. Please try again.';
+      setError(errorMessage);
       console.error(err);
     } finally {
       setIsLoading(false);
